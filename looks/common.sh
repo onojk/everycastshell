@@ -9,6 +9,9 @@
 #          optionally [1:a]; must output [core] at IWxIH (upscaled to 1920x1080 after). If it consumes
 #          [1:a] it must also output [aout].
 #   CMDS   array of 'filter@name cmd=EXPR' specs for tools/cmds.py (e, h, t, D)
+#   GRAIN  (optional) film grain strength, default 18, 0 = off. Grain is
+#          rendered at 640x360 and upscaled (chunky, filmic, cheap to encode)
+#          and merged into luma after [core] — looks should NOT add noise.
 #   EXTRA_INPUTS (optional array of extra ffmpeg input args, inputs 2..)
 # then calls `render "$@"`.
 # Usage of any look:  looks/NN_x.sh            full song
@@ -23,6 +26,7 @@ W=1920; H=1080; FPS=30
 # Internal working size for the dynamic chain (upscaled to WxH at the end:
 # faster, and the soft upscale is part of the grit). Override with IW/IH env.
 IW=${IW:-1280}; IH=${IH:-720}
+CRF=${CRF:-24}
 ARTIST_LINE="Every Cast Shell — Jonathan Kendall"
 mkdir -p "$ROOT/work" "$ROOT/out" "$ROOT/assets"
 
@@ -69,7 +73,14 @@ render() {
   {
     printf '[0:v]%s%s,sendcmd=f=%s[src];\n' "${PREP:+$PREP,}" "$LOOP" "$cmdf"
     printf '%s;\n' "$GRAPH"
-    printf "[core]format=yuv420p,scale=%s:%s:flags=bicubic," "$W" "$H"
+    if (( ${GRAIN:-18} > 0 )); then
+      printf 'nullsrc=s=640x360:r=%s,format=yuv420p,lutyuv=y=128:u=128:v=128,noise=c0s=%s:c0f=t+u,scale=%s:%s:flags=bicubic[grain];\n' \
+        "$FPS" "${GRAIN:-18}" "$IW" "$IH"
+      printf '[core]format=yuv420p[cg];[cg][grain]blend=c0_mode=grainmerge:c1_mode=normal:c2_mode=normal[core2];\n'
+    else
+      printf '[core]format=yuv420p[core2];\n'
+    fi
+    printf "[core2]scale=%s:%s:flags=bicubic," "$W" "$H"
     printf "drawtext=fontfile=%s:textfile=%s:fontsize=76:fontcolor=white:shadowcolor=black@0.7:shadowx=3:shadowy=3:x=(w-tw)/2:y=h/2-90:%s," \
       "$FONT" "$ROOT/work/$NUM.title.txt" "$fade"
     printf "drawtext=fontfile=%s:textfile=%s:fontsize=34:fontcolor=white@0.85:shadowcolor=black@0.7:shadowx=2:shadowy=2:x=(w-tw)/2:y=h/2+20:%s," \
@@ -84,7 +95,7 @@ render() {
   ffmpeg -hide_banner -v error -stats_period 10 -stats -y \
     -i "$COVER" -ss "$start" -i "$wav" "${EXTRA_INPUTS[@]}" \
     -filter_threads "$(nproc)" -/filter_complex "$graphf" -map '[vout]' "${amap[@]}" \
-    -t "$dur" -r "$FPS" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p \
+    -t "$dur" -r "$FPS" -c:v libx264 -preset veryfast -crf "$CRF" -pix_fmt yuv420p \
     -c:a aac -b:a 320k -movflags +faststart "$out"
   echo ">> done in $((SECONDS - t0))s"
 }

@@ -22,7 +22,7 @@ $(rain_layer rf 24 240 52 11);
 [rn][rf]blend=all_mode=lighten,lagfun=decay=0.6,format=yuv420p[rain];
 [base][rain]blend@r=c0_mode=screen:c0_opacity=0.3:c1_mode=normal:c2_mode=normal,
   lagfun@s=decay=0.9,
-  noise=alls=18:allf=t,vignette=PI/4[core]"
+  vignette=PI/4[core]"
 CMDS=(
   # slow push-in over the song (+12%) plus a loudness pump (+6%)
   "scale@z w=2*int($IW*(1+0.12*t/D+0.06*e)/2)"
